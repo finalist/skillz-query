@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { type Database } from './database.types'
 
 export type Unicorn = {
   id: number;
@@ -50,3 +51,5 @@ export const configSchema = z
 
 
 export type Config = z.infer<typeof configSchema>;
+
+export type Technology = Database['public']['Tables']['technologies']['Row']

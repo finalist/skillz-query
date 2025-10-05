@@ -2,9 +2,13 @@
 
 import { Config, configSchema, explanationsSchema, Result } from "@/lib/types";
 import { openai } from "@ai-sdk/openai";
-import { sql } from "@vercel/postgres";
+import { Pool } from "pg";
 import { generateObject } from "ai";
 import { z } from "zod";
+
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL,
+});
 
 export const generateQuery = async (input: string) => {
   "use server";
@@ -13,44 +17,56 @@ export const generateQuery = async (input: string) => {
       model: openai("gpt-4o"),
       system: `You are a SQL (postgres) and data visualization expert. Your job is to help the user write a SQL query to retrieve the data they need. The table schema is as follows:
 
-      unicorns (
-      id SERIAL PRIMARY KEY,
-      company VARCHAR(255) NOT NULL UNIQUE,
-      valuation DECIMAL(10, 2) NOT NULL,
-      date_joined DATE,
-      country VARCHAR(255) NOT NULL,
-      city VARCHAR(255) NOT NULL,
-      industry VARCHAR(255) NOT NULL,
-      select_investors TEXT NOT NULL
-    );
+      labels (
+        id integer primary key,
+        type smallint,
+        text_nl text,
+        acronym text
+      )
 
-    Only retrieval queries are allowed.
+      organizations (
+        id bigint primary key,
+        name text,
+        types character varying(20)[],
+        website_url text
+      )
 
-    For things like industry, company names and other string fields, use the ILIKE operator and convert both the search term and the field to lowercase using LOWER() function. For example: LOWER(industry) ILIKE LOWER('%search_term%').
+      technologies (
+        id bigint primary key,
+        label text,
+        alt_label text,
+        description integer,
+        link text,
+        quadrant integer,
+        types integer[],
+        organization_id bigint references organizations(id),
+        parent_id bigint references technologies(id)
+      )
 
-    Note: select_investors is a comma-separated list of investors. Trim whitespace to ensure you're grouping properly. Note, some fields may be null or have only one value.
-    When answering questions about a specific field, ensure you are selecting the identifying column (ie. what is Vercel's valuation would select company and valuation').
+      profiles (
+        id uuid primary key,
+        full_name text
+      )
 
-    The industries available are:
-    - healthcare & life sciences
-    - consumer & retail
-    - financial services
-    - enterprise tech
-    - insurance
-    - media & entertainment
-    - industrials
-    - health
+      experience (
+        id bigint primary key,
+        profile_id uuid references profiles(id)
+        technologies bigint[] references technologies(id)
+      )
 
-    If the user asks for a category that is not in the list, infer based on the list above.
+      education (
+        id bigint primary key,
+        name text,
+        organization_id bigint references organizations(id),
+        profile_id uuid references profiles(id),
+        technologies bigint[] references technologies(id)
+      )
 
-    Note: valuation is in billions of dollars so 10b would be 10.0.
-    Note: if the user asks for a rate, return it as a decimal. For example, 0.1 would be 10%.
+      Only retrieval queries are allowed.
 
-    If the user asks for 'over time' data, return by year.
+      For string and text fields, use the ILIKE operator and convert both the search term and the field to lowercase using LOWER() function. For example: LOWER(industry) ILIKE LOWER('%search_term%').
 
-    When searching for UK or USA, write out United Kingdom or United States respectively.
-
-    EVERY QUERY SHOULD RETURN QUANTITATIVE DATA THAT CAN BE PLOTTED ON A CHART! There should always be at least two columns. If the user asks for a single column, return the column and the count of the column. If the user asks for a rate, return the rate as a decimal. For example, 0.1 would be 10%.
+      EVERY QUERY SHOULD RETURN QUANTITATIVE DATA THAT CAN BE PLOTTED ON A CHART! There should always be at least two columns. If the user asks for a single column, return the column and the count of the column. If the user asks for a rate, return the rate as a decimal. For example, 0.1 would be 10%.
     `,
       prompt: `Generate the query necessary to retrieve the data the user wants: ${input}`,
       schema: z.object({
@@ -84,7 +100,7 @@ export const runGenerateSQLQuery = async (query: string) => {
 
   let data: any;
   try {
-    data = await sql.query(query);
+    data = await pool.query(query);
   } catch (e: any) {
     if (e.message.includes('relation "unicorns" does not exist')) {
       console.log(

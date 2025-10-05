@@ -44,7 +44,13 @@ const ChartContainer = React.forwardRef<
   }
 >(({ id, className, children, config, ...props }, ref) => {
   const uniqueId = React.useId()
-  const chartId = `chart-${id || uniqueId.replace(/:/g, "")}`
+  const [chartId, setChartId] = React.useState(`chart-${id || ""}`)
+
+  React.useEffect(() => {
+    if (!id) {
+      setChartId(`chart-${uniqueId.replace(/:/g, "")}`)
+    }
+  }, [id, uniqueId])
 
   return (
     <ChartContext.Provider value={{ config }}>
